@@ -1,0 +1,69 @@
+name: Build Release
+
+on:
+  push:
+    branches:
+      - 'release/**'   # trigger only on release/x.x.x branches, NOT main/master
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows
+          - os: macos-latest
+            label: macOS
+
+    name: Build — ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ── Windows build ──────────────────────────────────────────────────────
+      - name: Build (Windows)
+        if: matrix.os == 'windows-latest'
+        run: npm run build:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── macOS build ────────────────────────────────────────────────────────
+      - name: Build (macOS)
+        if: matrix.os == 'macos-latest'
+        run: npm run build:mac
+        env:
+          GH_TOKEN:                    ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      # ── Extract version from branch name (release/1.2.3 → v1.2.3) ─────────
+      - name: Get version from branch name
+        id: version
+        shell: bash
+        run: |
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          VERSION="${BRANCH#release/}"
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+
+      # ── Attach binaries to an existing manually-created GitHub Release ─────
+      # Make sure you created the release with tag vX.X.X BEFORE pushing this branch
+      - name: Attach files to existing GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          files: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
