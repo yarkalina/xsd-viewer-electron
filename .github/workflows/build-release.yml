@@ -3,7 +3,7 @@ name: Build Release
 on:
   push:
     branches:
-      - 'release/**'   # triggers on release/x.x.x branches only — NOT main/master
+      - 'main'   # triggers on release/x.x.x branches only — NOT main/master
 
 jobs:
   # ── JOB 1: build on each platform ─────────────────────────────────────────
