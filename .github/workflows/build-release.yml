@@ -3,17 +3,21 @@ name: Build Release
 on:
   push:
     branches:
-      - 'release/**'   # trigger only on release/x.x.x branches, NOT main/master
+      - 'release/**'   # triggers on release/x.x.x branches only — NOT main/master
 
 jobs:
+  # ── JOB 1: build on each platform ─────────────────────────────────────────
   build:
     strategy:
+      fail-fast: false   # let both platforms finish even if one fails
       matrix:
         include:
           - os: windows-latest
             label: Windows
+            artifact_name: xsd-viewer-windows
           - os: macos-latest
             label: macOS
+            artifact_name: xsd-viewer-macos
 
     name: Build — ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
@@ -31,39 +35,34 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # ── Windows build ──────────────────────────────────────────────────────
+      # ── Windows ─────────────────────────────────────────────────────────────
       - name: Build (Windows)
         if: matrix.os == 'windows-latest'
         run: npm run build:win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── macOS build ────────────────────────────────────────────────────────
+      # ── macOS ───────────────────────────────────────────────────────────────
       - name: Build (macOS)
         if: matrix.os == 'macos-latest'
         run: npm run build:mac
         env:
-          GH_TOKEN:                    ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false   # no code signing
 
-      # ── Extract version from branch name (release/1.2.3 → v1.2.3) ─────────
-      - name: Get version from branch name
-        id: version
-        shell: bash
-        run: |
-          BRANCH="${GITHUB_REF#refs/heads/}"
-          VERSION="${BRANCH#release/}"
-          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
-
-      # ── Attach binaries to an existing manually-created GitHub Release ─────
-      # Make sure you created the release with tag vX.X.X BEFORE pushing this branch
-      - name: Attach files to existing GitHub Release
-        uses: softprops/action-gh-release@v2
+      # ── Upload to GitHub Actions Artifact storage ──────────────────────────
+      # Artifacts visible at:
+      #   Actions tab → pick a run → Artifacts section
+      # Also accessible via REST API:
+      #   GET /repos/{owner}/{repo}/actions/runs/{run_id}/artifacts
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          files: |
+          name: ${{ matrix.artifact_name }}
+          path: |
             dist/*.exe
             dist/*.dmg
             dist/*.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            dist/*.blockmap
+          if-no-files-found: error
+          retention-days: 90
